@@ -1,16 +1,16 @@
 let video;
 let prevPixels = null;
 let asciiSets = [
-  '@#S%?*+;:,. ',
-  '█▓▒░ ',
-  'WMBRXVYIti+=~:,. '
+  '@#&+929',
+  '929929+#@&',
+  '@&#929+29'
 ];
 let setIndex = 0;
 let colored = false;
 let fontSize = 15;
-let motionThreshold = 30;  // lower = more sensitive to motion
-let edgeThreshold = 150;   // lower = more edges captured
-let updateInterval = 3;    // frames between ASCII updates
+let motionThreshold = 30;
+let edgeThreshold = 300;
+let updateInterval = 7;
 let frameCount_ = 0;
 let cachedPixels = null;
 
@@ -28,6 +28,19 @@ function setup() {
   video.volume(0);
 }
 
+function isWarm(r, g, b) {
+  const max_ = max(r, g, b);
+  const min_ = min(r, g, b);
+  const delta = max_ - min_;
+  if (delta < 20) return false;
+  let hue;
+  if (max_ === r) hue = ((g - b) / delta) % 6;
+  else if (max_ === g) hue = (b - r) / delta + 2;
+  else hue = (r - g) / delta + 4;
+  hue = (hue * 60 + 360) % 360;
+  return hue <= 70 || hue >= 330;
+}
+
 function getBrightness(pixels, x, y, w, h) {
   if (x < 0 || x >= w || y < 0 || y >= h) return 0;
   const idx = (y * w + x) * 4;
@@ -37,7 +50,6 @@ function getBrightness(pixels, x, y, w, h) {
 function draw() {
   background(0);
 
-  // Mouse X controls character density
   fontSize = map(mouseX, 0, width, 6, 20);
   textSize(fontSize);
 
@@ -51,13 +63,11 @@ function draw() {
   const offsetX = (width - drawW) / 2;
   const offsetY = (height - drawH) / 2;
 
-  // Draw original video underneath
   image(video, offsetX, offsetY, drawW, drawH);
 
   video.loadPixels();
   if (video.pixels.length === 0) return;
 
-  // Only update ASCII every N frames
   frameCount_++;
   if (frameCount_ % updateInterval === 0 || !cachedPixels) {
     cachedPixels = video.pixels.slice();
@@ -70,6 +80,7 @@ function draw() {
   const cellH = drawH / rows;
   const charset = chars();
 
+  // Render ASCII
   noStroke();
   textAlign(CENTER, CENTER);
 
@@ -84,7 +95,7 @@ function draw() {
       const b = currPixels[idx + 2];
       const brightness = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
 
-      // --- Motion detection ---
+      // Motion detection
       let motionScore = 0;
       if (prevPixels && prevPixels.length === currPixels.length) {
         const dr = currPixels[idx]     - prevPixels[idx];
@@ -93,7 +104,7 @@ function draw() {
         motionScore = sqrt(dr * dr + dg * dg + db * db);
       }
 
-      // --- Edge detection (Sobel) ---
+      // Edge detection (Sobel)
       const b00 = getBrightness(currPixels, px - 1, py - 1, vw, vh);
       const b10 = getBrightness(currPixels, px,     py - 1, vw, vh);
       const b20 = getBrightness(currPixels, px + 1, py - 1, vw, vh);
@@ -110,17 +121,15 @@ function draw() {
       const hasMotion = motionScore > motionThreshold;
       const hasEdge = edgeScore > edgeThreshold;
 
-      // Only draw ASCII where motion or edges are detected, and pixel is bright enough
       if (!hasMotion && !hasEdge) continue;
       if (brightness < 0.2) continue;
+      if (!isWarm(r, g, b)) continue;
 
       const charIdx = floor(brightness * (charset.length - 1));
       const ch = charset[charIdx];
-
       const x = offsetX + col * cellW + cellW / 2;
       const y = offsetY + row * cellH + cellH / 2;
 
-      // Stronger signal = more opaque
       const strength = max(
         map(motionScore, motionThreshold, 200, 0, 1, true),
         map(edgeScore, edgeThreshold, 600, 0, 1, true)
@@ -140,10 +149,8 @@ function draw() {
   if (frameCount_ % updateInterval === 0) {
     prevPixels = currPixels.slice();
   }
-}
 
-function mousePressed() {
-  colored = !colored;
+
 }
 
 function keyPressed() {
@@ -154,17 +161,16 @@ function keyPressed() {
     if (video.elt.paused) video.play();
     else video.pause();
   }
-  // Tune motion sensitivity: Q/A
   if (key === 'q') motionThreshold = max(5, motionThreshold - 5);
   if (key === 'a') motionThreshold += 5;
-  // Tune edge sensitivity: W/S
   if (key === 'w') edgeThreshold = max(10, edgeThreshold - 10);
   if (key === 's') edgeThreshold += 10;
-  // Tune ASCII update speed: E/D (higher interval = slower)
   if (key === 'e') updateInterval = max(1, updateInterval - 1);
   if (key === 'd') updateInterval += 1;
+  if (key === 'c') colored = !colored;
 }
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
 }
+

@@ -13,6 +13,9 @@ let edgeThreshold = 300;
 let updateInterval = 7;
 let frameCount_ = 0;
 let cachedPixels = null;
+let maskRegion = null;
+let dragging = false;
+let dragStart = null;
 
 const chars = () => asciiSets[setIndex];
 
@@ -70,6 +73,7 @@ function draw() {
 
   frameCount_++;
   if (frameCount_ % updateInterval === 0 || !cachedPixels) {
+    prevPixels = cachedPixels ? cachedPixels : null;
     cachedPixels = video.pixels.slice();
   }
 
@@ -80,7 +84,6 @@ function draw() {
   const cellH = drawH / rows;
   const charset = chars();
 
-  // Render ASCII
   noStroke();
   textAlign(CENTER, CENTER);
 
@@ -125,32 +128,65 @@ function draw() {
       if (brightness < 0.2) continue;
       if (!isWarm(r, g, b)) continue;
 
+      // Only draw inside mask region if one is set
+      if (maskRegion) {
+        const cx = offsetX + col * cellW + cellW / 2;
+        const cy = offsetY + row * cellH + cellH / 2;
+        if (cx < maskRegion.x || cx > maskRegion.x + maskRegion.w ||
+            cy < maskRegion.y || cy > maskRegion.y + maskRegion.h) continue;
+      }
+
       const charIdx = floor(brightness * (charset.length - 1));
       const ch = charset[charIdx];
       const x = offsetX + col * cellW + cellW / 2;
       const y = offsetY + row * cellH + cellH / 2;
 
-      const strength = max(
-        map(motionScore, motionThreshold, 200, 0, 1, true),
-        map(edgeScore, edgeThreshold, 600, 0, 1, true)
-      );
-      const alpha = map(strength, 0, 1, 120, 255);
-
       if (colored) {
-        fill(r, g, b, alpha);
+        fill(r, g, b);
       } else {
-        fill(255, alpha);
+        fill(255);
       }
 
       text(ch, x, y);
     }
   }
 
-  if (frameCount_ % updateInterval === 0) {
-    prevPixels = currPixels.slice();
+
+  // Draw mask region outline while dragging or when set
+  if (dragging && dragStart) {
+    noFill();
+    stroke(255, 80, 80);
+    strokeWeight(1.5);
+    const rx = min(dragStart.x, mouseX);
+    const ry = min(dragStart.y, mouseY);
+    const rw = abs(mouseX - dragStart.x);
+    const rh = abs(mouseY - dragStart.y);
+    rect(rx, ry, rw, rh);
+  } else if (maskRegion) {
+    noFill();
+    stroke(255, 80, 80, 100);
+    strokeWeight(1);
+    rect(maskRegion.x, maskRegion.y, maskRegion.w, maskRegion.h);
   }
+}
 
+function mousePressed() {
+  dragging = true;
+  dragStart = { x: mouseX, y: mouseY };
+}
 
+function mouseReleased() {
+  if (dragging && dragStart) {
+    const rx = min(dragStart.x, mouseX);
+    const ry = min(dragStart.y, mouseY);
+    const rw = abs(mouseX - dragStart.x);
+    const rh = abs(mouseY - dragStart.y);
+    if (rw > 10 && rh > 10) {
+      maskRegion = { x: rx, y: ry, w: rw, h: rh };
+    }
+  }
+  dragging = false;
+  dragStart = null;
 }
 
 function keyPressed() {
@@ -168,9 +204,9 @@ function keyPressed() {
   if (key === 'e') updateInterval = max(1, updateInterval - 1);
   if (key === 'd') updateInterval += 1;
   if (key === 'c') colored = !colored;
+  if (key === 'x') maskRegion = null;
 }
 
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
 }
-
